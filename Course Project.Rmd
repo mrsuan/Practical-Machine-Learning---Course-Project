@@ -1,0 +1,142 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Asher Wen"
+date: "5 June 2016"
+output: html_document
+---
+
+## Introduction
+
+This report is the output of the Course Project of the Practical Machine Learning module under Coursera's Data Science Specialisation by John Hopkin's University.  
+
+This project seeks to predict the manner in which participants did a particular exercise based on how much of a particular activity they do. 
+
+Data from this project is from  http://groupware.les.inf.puc-rio.br/har.
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Scope of Report
+
+The report will cover the following:
+(1) How the model was built
+(2) How cross validation was used
+(3) Expected out of sample error
+(4) Choices & assumptions
+(5) Prediction of the 20 different test cases
+
+
+### Loading Libraries & Packages
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+```
+
+### Loading Datasets
+
+#### Setting the working directory:
+```{r}
+setwd("/Users/Asher/DataScience/Practical Machine Learning/Course Project")
+```
+
+#### Getting the training data:
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+```{r}
+trainURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+if(!file.exists("pml-training.csv")){
+        download.file(trainURL, destfile = "pml-training.csv", method="curl")
+        }
+train <- read.csv("pml-training.csv", na.strings=c("NA",""))
+```
+
+#### Getting the testing data:
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+```{r}
+testURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+if(!file.exists("pml-testing.csv")){
+        download.file(testURL, destfile = "pml-testing.csv", method="curl")
+        }
+test <- read.csv("pml-testing.csv", na.strings=c("NA",""))
+```
+
+#### Checking the structure of both training & testing data sets:
+```{r}
+colnames_train <- colnames(train)
+colnames_test <- colnames(test)
+all.equal(colnames_train[1:length(colnames_train)-1], colnames_test[1:length(colnames_train)-1])
+```
+Only the last column of the two datasets are different, i.e. "classe" on the train dataset and "problem_id" on the test dataset.
+
+#### Data cleaning
+We will remove columns in the training & test set that has missing values.
+```{r}
+train <- train[, colSums(is.na(train)) == 0]
+test <- test[, colSums(is.na(test)) == 0]
+```
+
+We will also remove the first 7 columns that contain user data, time stamps, etc that will have low predictive value to Classe
+```{r}
+trainData <- train[, -c(1:7)]
+testData <- test[, -c(1:7)]
+```
+The cleaned data set has 53 variables each, with trainData having 19622 observations and testData having 20 observations.
+
+### Creating a Cross Validation set
+We will split trainData into a training set (60%) and a cross validation set (40%) to get out-of-sample errors
+```{r}
+inTrain <- createDataPartition(trainData$classe, p=0.6, list=FALSE)
+training <- trainData[inTrain,]
+validation <- trainData[-inTrain,]
+```
+
+### Building the Model
+We will use Decision Tree and Random Forest to predict the outcome.
+
+#### Decision Tree Algorithm
+```{r}
+control <- trainControl(method = "cv", number = 5)
+mod_dt <- train(classe ~ ., method = "rpart", data = training, trControl = control)
+print(mod_dt, digits = 4)
+```
+Visualising the model:
+```{r}
+plot(mod_dt$finalModel, uniform=TRUE, 
+      main="Classification Tree")
+text(mod_dt$finalModel, use.n=TRUE, all=TRUE, cex=.8)
+```
+Predicting with the cross validation set:
+```{r}
+pred_dt <- predict(mod_dt, validation)
+
+## Loading Confusion Matrix
+confusionMatrix(pred_dt, validation$classe)
+```
+From the confusion matrix, the accuracy rate is 0.49 and out of sample error rate is 0.49. Using decision tree doesn't predict the outcome of Classe very well. 
+
+#### Random Forest Algorithm
+```{r}
+mod_rf <- train(classe ~ ., method = "rf", data = training, trControl = control)
+print(mod_rf, digits = 4)
+```
+Predicting with the cross validation set:
+```{r}
+pred_rf <- predict(mod_rf, validation)
+
+## Loading Confusion Matrix
+confusionMatrix(pred_rf, validation$classe)
+```
+From the confusion matrix, the accuracy rate is 0.994 and the out of sample error rate is 0.994. Random Forest predicts the outcome of Classe very accurately.
+
+### Prediction of test cases
+We use the more accurate Random Forest to predict the outcome variable classe for the testing set.
+```{r}
+predict(mod_rf, testData)
+```
